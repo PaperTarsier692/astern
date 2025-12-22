@@ -5,10 +5,9 @@
 #include <time.h>
 #include <float.h>
 
-#define X 1440
-#define Y 750
 #define FPS 60
-#define SPEED 1
+#define SPEED_MIN 500
+#define SPEED_MAX 1000
 #define POINTS 500
 #define RADIUS 5
 #define CONNECTION_DIST 50000
@@ -38,6 +37,8 @@ typedef struct
 
 Point points[POINTS];
 unsigned int ballCounter;
+unsigned int X = 1920;
+unsigned int Y = 1080;
 
 Vector2 getRandomPos()
 {
@@ -46,7 +47,17 @@ Vector2 getRandomPos()
 
 Vector2 getRandomVel()
 {
-    return (Vector2){(float)GetRandomValue(-SPEED, SPEED), (float)GetRandomValue(-SPEED, SPEED)};
+    float dir = GetRandomValue(0, 359);
+    float rad = dir * RAD2DEG;
+    float mult = (float)GetRandomValue(SPEED_MIN, SPEED_MAX) / 1000.0f;
+    return (Vector2){cosf(rad) * mult, sinf(rad) * mult};
+}
+
+void initPoint(Point *point)
+{
+    *point = (Point){
+        getRandomPos(),
+        getRandomVel()};
 }
 
 void initPoints()
@@ -60,16 +71,9 @@ void initPoints()
 void movePoint(Point *point)
 {
     point->pos = Vector2Add(point->pos, point->vel);
-    if (point->pos.x > X)
-        point->pos.x -= X;
-    if (point->pos.y > Y)
-        point->pos.y -= Y;
-    if (point->pos.x < 0)
-        point->pos.x += X;
-    if (point->pos.y < 0)
-        point->pos.y += Y;
+    if (point->pos.x > X || point->pos.x < 0 || point->pos.y > Y || point->pos.y < 0)
+        initPoint(point);
 }
-
 void movePoints()
 {
     for (unsigned int i = 0; i < POINTS; i++)
@@ -137,6 +141,7 @@ void drawConnections()
 
 int main(void)
 {
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE + FLAG_WINDOW_HIGHDPI);
     srand(time(NULL));
     SetTraceLogLevel(LOG_WARNING);
     InitWindow(X, Y, "Kein Stern, nur A - Raylib");
@@ -148,6 +153,11 @@ int main(void)
     {
         if (IsKeyPressed(KEY_F))
             ToggleFullscreen();
+        if (IsWindowResized())
+        {
+            X = GetScreenWidth();
+            Y = GetScreenHeight();
+        }
         BeginDrawing();
         ClearBackground(GRAY);
         movePoints();
