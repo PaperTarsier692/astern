@@ -1,17 +1,18 @@
-#include "raylib.h"
-#include "raymath.h"
+#include <raylib.h>
+#include <raymath.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <time.h>
 #include <float.h>
+#include <math.h>
+#include <time.h>
 
 #define FPS 60
-#define SPEED_MIN 500
-#define SPEED_MAX 1000
+#define SPEED_MIN 200
+#define SPEED_MAX 400
 #define POINTS 500
 #define RADIUS 5
-#define CONNECTION_DIST 50000
-#define MAX_CONNECTIONS 10
+#define CONNECTION_DIST 500
+#define MAX_CONNECTIONS 3
 
 typedef struct Point Point;
 
@@ -48,7 +49,7 @@ Vector2 getRandomPos()
 Vector2 getRandomVel()
 {
     float dir = GetRandomValue(0, 359);
-    float rad = dir * RAD2DEG;
+    float rad = dir * DEG2RAD;
     float mult = (float)GetRandomValue(SPEED_MIN, SPEED_MAX) / 1000.0f;
     return (Vector2){cosf(rad) * mult, sinf(rad) * mult};
 }
@@ -97,7 +98,7 @@ void getNearestPoints(Point *point, int index)
         if (i == index)
             continue;
         other = &points[i];
-        distance = Vector2DistanceSqr(point->pos, other->pos);
+        distance = Vector2Distance(point->pos, other->pos);
         if (distance > CONNECTION_DIST)
             continue;
         int maxIdx = 0;
@@ -121,12 +122,33 @@ void drawPoints()
         drawPoint(points[i]);
 }
 
-void drawConnection(Point point, int index)
+void DrawArrowV(Vector2 startPos, Vector2 endPos, Color color, float size, float deg)
 {
-    getNearestPoints(&point, index);
+    DrawLineV(startPos, endPos, color);
+    Vector2 dir = Vector2Subtract(endPos, startPos);
+    Vector2 base = Vector2Scale(Vector2Normalize(dir), -size);
+    Vector2 pos1 = Vector2Add(endPos, Vector2Rotate(base, deg * DEG2RAD));
+    Vector2 pos2 = Vector2Add(endPos, Vector2Rotate(base, -deg * DEG2RAD));
+    DrawTriangleLines(endPos, pos1, pos2, color);
+}
+
+void drawConnection(Point *point, int index)
+{
+    getNearestPoints(point, index);
     for (int i = 0; i < MAX_CONNECTIONS; i++)
-        if (point.connected[i].distance < FLT_MAX)
-            DrawLineV(point.pos, point.connected[i].point->pos, (Color){100, 255, 100, 255 - Clamp(point.connected[i].distance / 100, 20, 255)});
+    {
+        Entry e = point->connected[i];
+        if (e.distance == FLT_MAX)
+            continue;
+
+        Vector2 other = e.point->pos;
+        unsigned char alpha = (unsigned char)(Clamp(1.0f - (e.distance / (float)CONNECTION_DIST), 0.0f, 1.0f) * 255.0f);
+        Color color = (Color){100, 255, 100, alpha};
+        Vector2 offset = Vector2Scale(Vector2Normalize(Vector2Subtract(other, point->pos)), RADIUS);
+        Vector2 startPos = Vector2Add(point->pos, offset);
+        Vector2 endPos = Vector2Subtract(other, offset);
+        DrawArrowV(startPos, endPos, color, 8, 30);
+    }
 }
 
 void getPath(Point start, Point end)
@@ -136,7 +158,7 @@ void getPath(Point start, Point end)
 void drawConnections()
 {
     for (unsigned int i = 0; i < POINTS; i++)
-        drawConnection(points[i], i);
+        drawConnection(&points[i], i);
 }
 
 int main(void)
