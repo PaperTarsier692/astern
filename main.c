@@ -12,7 +12,8 @@
 #define POINTS 500
 #define RADIUS 5
 #define CONNECTION_DIST 500
-#define MAX_CONNECTIONS 3
+#define CONNECTIONS 3
+#define MAX_CONNECTIONS 30
 
 typedef struct Point Point;
 
@@ -26,6 +27,7 @@ typedef struct Point
 {
     Vector2 pos;
     Vector2 vel;
+    uint8_t connected_count;
     Entry connected[MAX_CONNECTIONS];
 } Point;
 
@@ -58,15 +60,13 @@ void initPoint(Point *point)
 {
     *point = (Point){
         getRandomPos(),
-        getRandomVel()};
+        getRandomVel(), 0};
 }
 
 void initPoints()
 {
     for (unsigned int i = 0; i < POINTS; i++)
-        points[i] = (Point){
-            getRandomPos(),
-            getRandomVel()};
+        initPoint(&points[i]);
 }
 
 void movePoint(Point *point)
@@ -75,6 +75,7 @@ void movePoint(Point *point)
     if (point->pos.x > X || point->pos.x < 0 || point->pos.y > Y || point->pos.y < 0)
         initPoint(point);
 }
+
 void movePoints()
 {
     for (unsigned int i = 0; i < POINTS; i++)
@@ -86,14 +87,80 @@ void drawPoint(Point point)
     DrawCircleV(point.pos, RADIUS, (Color){200, 200, 200, 100});
 }
 
+void drawPoints()
+{
+    for (unsigned int i = 0; i < POINTS; i++)
+        drawPoint(points[i]);
+}
+
+void preparePoint(Point *point)
+{
+    point->connected_count = 0;
+    for (uint8_t i = 0; i < MAX_CONNECTIONS; i++)
+        point->connected[i] = (Entry){NULL, FLT_MAX};
+}
+
+uint8_t getFreeEntry(Point *point)
+{
+    for (uint8_t i = 0; i < CONNECTIONS; i++)
+    {
+        if (point->connected[i].point == NULL)
+            return i;
+    }
+    return 0;
+}
+
+uint8_t getFreeEntryMax(Point *point)
+{
+    for (uint8_t i = CONNECTIONS - 1; i < MAX_CONNECTIONS; i++)
+    {
+        if (point->connected[i].point == NULL)
+            return i;
+    }
+    return 0;
+}
+
+uint8_t getMaxDistanceIndex(Point *point)
+{
+    Entry *entries = point->connected;
+    uint8_t index = 0;
+    float distance = entries[0].distance;
+    for (uint8_t i = 1; i < CONNECTIONS; i++)
+        if (entries[i].distance > distance)
+        {
+            distance = entries[i].distance;
+            index = i;
+        }
+    return index;
+}
+
+void addEntryIfNotExists(Point *point, Entry *entry)
+{
+    if (point == NULL || entry == NULL || entry->point == NULL)
+        return;
+    Entry *entries = point->connected;
+    for (uint8_t i = 0; i < MAX_CONNECTIONS; i++)
+    {
+        if (entries[i].point == entry->point)
+            return;
+
+        if (entries[i].point == NULL)
+        {
+            entries[i] = *entry;
+            return;
+        }
+    }
+}
+
 void getNearestPoints(Point *point, int index)
 {
     Point *other;
     float distance;
     Entry *entries = point->connected;
-    for (int j = 0; j < MAX_CONNECTIONS; j++)
-        entries[j].distance = FLT_MAX;
-    for (int i = 0; i < POINTS; i++)
+    uint8_t max_index = getMaxDistanceIndex(point);
+    float max_distance = entries[max_index].distance;
+
+    for (uint16_t i = 0; i < POINTS; i++)
     {
         if (i == index)
             continue;
@@ -101,25 +168,30 @@ void getNearestPoints(Point *point, int index)
         distance = Vector2Distance(point->pos, other->pos);
         if (distance > CONNECTION_DIST)
             continue;
-        int maxIdx = 0;
-        float maxDist = entries[0].distance;
-        for (int j = 1; j < MAX_CONNECTIONS; j++)
+
+        if (distance < max_distance)
         {
-            if (entries[j].distance > maxDist)
-            {
-                maxDist = entries[j].distance;
-                maxIdx = j;
-            }
+            entries[max_index] = (Entry){other, distance};
+            max_index = getMaxDistanceIndex(point);
+            max_distance = entries[max_index].distance;
         }
-        if (distance < maxDist)
-            entries[maxIdx] = (Entry){other, distance};
     }
 }
 
-void drawPoints()
+void completeConnections(Point *point)
 {
-    for (unsigned int i = 0; i < POINTS; i++)
-        drawPoint(points[i]);
+    Point *other;
+    Entry *entries = point->connected;
+    Entry entry;
+
+    for (uint8_t i = 0; i < CONNECTIONS; i++)
+    {
+        other = entries[i].point;
+        if (other == NULL || entries[i].distance == FLT_MAX)
+            continue;
+        entry = (Entry){point, entries[i].distance};
+        addEntryIfNotExists(other, &entry);
+    }
 }
 
 void DrawArrowV(Vector2 startPos, Vector2 endPos, Color color, float size, float deg)
@@ -134,7 +206,6 @@ void DrawArrowV(Vector2 startPos, Vector2 endPos, Color color, float size, float
 
 void drawConnection(Point *point, int index)
 {
-    getNearestPoints(point, index);
     for (int i = 0; i < MAX_CONNECTIONS; i++)
     {
         Entry e = point->connected[i];
@@ -157,6 +228,15 @@ void getPath(Point start, Point end)
 
 void drawConnections()
 {
+    for (unsigned int i = 0; i < POINTS; i++)
+        preparePoint(&points[i]);
+
+    for (unsigned int i = 0; i < POINTS; i++)
+        getNearestPoints(&points[i], i);
+
+    for (unsigned int i = 0; i < POINTS; i++)
+        completeConnections(&points[i]);
+
     for (unsigned int i = 0; i < POINTS; i++)
         drawConnection(&points[i], i);
 }
