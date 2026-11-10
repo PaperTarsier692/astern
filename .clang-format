@@ -1,0 +1,3 @@
+# yaml-language-server: $schema=https://json.schemastore.org/clang-format-21.x.json
+BasedOnStyle: WebKit
+IndentWidth: 4
