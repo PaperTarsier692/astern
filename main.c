@@ -2,13 +2,13 @@
 #include <math.h>
 #include <raylib.h>
 #include <raymath.h>
-#include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
 
 #define FPS 60
-#define SPEED_MIN 10
-#define SPEED_MAX 100
+#define SPEED_MIN 100
+#define SPEED_MAX 500
 #define POINTS 500
 #define RADIUS 5
 #define CONNECTION_DIST 100
@@ -376,6 +376,14 @@ int main(void)
             mousePos = GetMousePosition();
             if (posInBounds(&mousePos))
                 start->pos = GetMousePosition();
+        }
+
+        if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+            mousePos = GetMousePosition();
+            if (posInBounds(&mousePos)) {
+                end->pos = GetMousePosition();
+                end->vel = getRandomVel();
+            }
         }
 
         if (IsKeyPressed(KEY_C))
