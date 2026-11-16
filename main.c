@@ -1,19 +1,32 @@
 #include <float.h>
 #include <math.h>
+#include <string.h>
+#define RAYGUI_IMPLEMENTATION
+#include <raygui.h>
 #include <raylib.h>
 #include <raymath.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
 
+#if defined(PLATFORM_WEB)
+#include <emscripten/emscripten.h>
+#endif
+
+typedef struct {
+    float speed;
+    float radius;
+    float connection_dist;
+    uint8_t connections;
+} Settings;
+
+Settings settings = (Settings) { 100, 5, 100, 3 };
+
 #define FPS 60
-#define SPEED_MIN 100
-#define SPEED_MAX 500
 #define POINTS 500
-#define RADIUS 5
-#define CONNECTION_DIST 100
-#define CONNECTIONS 3
 #define MAX_CONNECTIONS 30
+#define MIN_SPEED 1
+#define MAX_SPEED 5
 
 typedef struct Point Point;
 
@@ -36,6 +49,7 @@ unsigned int X = 1920;
 unsigned int Y = 1080;
 Point* start;
 Point* end;
+bool menuShown = false;
 
 Vector2 getRandomPos()
 {
@@ -46,7 +60,7 @@ Vector2 getRandomVel()
 {
     float dir = GetRandomValue(0, 359);
     float rad = dir * DEG2RAD;
-    float mult = (float)GetRandomValue(SPEED_MIN, SPEED_MAX) / 1000.0f;
+    float mult = (float)GetRandomValue(MIN_SPEED, MAX_SPEED) / 1000.0f;
     return (Vector2) { cosf(rad) * mult, sinf(rad) * mult };
 }
 
@@ -75,7 +89,7 @@ bool posInBounds(Vector2* pos)
 
 void movePoint(Point* point)
 {
-    point->pos = Vector2Add(point->pos, point->vel);
+    point->pos = Vector2Add(point->pos, Vector2Scale(point->vel, settings.speed));
     if (!posInBounds(&point->pos))
         initPoint(point);
 }
@@ -88,7 +102,7 @@ void movePoints()
 
 void drawPoint(Point point)
 {
-    DrawCircleV(point.pos, RADIUS, (Color) { 200, 200, 200, 100 });
+    DrawCircleV(point.pos, settings.radius, (Color) { 150, 150, 150, 255 });
 }
 
 void drawPoints()
@@ -108,7 +122,7 @@ void preparePoint(Point* point)
 
 uint8_t getFreeEntry(Point* point)
 {
-    for (uint8_t i = 0; i < CONNECTIONS; i++) {
+    for (uint8_t i = 0; i < settings.connections; i++) {
         if (point->connected[i].point == NULL)
             return i;
     }
@@ -117,7 +131,7 @@ uint8_t getFreeEntry(Point* point)
 
 uint8_t getFreeEntryMax(Point* point)
 {
-    for (uint8_t i = CONNECTIONS - 1; i < MAX_CONNECTIONS; i++) {
+    for (uint8_t i = settings.connections - 1; i < MAX_CONNECTIONS; i++) {
         if (point->connected[i].point == NULL)
             return i;
     }
@@ -129,7 +143,7 @@ uint8_t getMaxDistanceIndex(Point* point)
     Entry* entries = point->connected;
     uint8_t index = 0;
     float distance = entries[0].distance;
-    for (uint8_t i = 1; i < CONNECTIONS; i++)
+    for (uint8_t i = 1; i < settings.connections; i++)
         if (entries[i].distance > distance) {
             distance = entries[i].distance;
             index = i;
@@ -166,7 +180,7 @@ void getNearestPoints(Point* point, int index)
             continue;
         other = &points[i];
         distance = Vector2Distance(point->pos, other->pos);
-        if (distance > CONNECTION_DIST)
+        if (distance > settings.connection_dist)
             continue;
 
         if (distance < max_distance) {
@@ -183,7 +197,7 @@ void completeConnections(Point* point)
     Entry entry;
     Entry* entries = point->connected;
 
-    for (uint8_t i = 0; i < CONNECTIONS; i++) {
+    for (uint8_t i = 0; i < settings.connections; i++) {
         other = entries[i].point;
         if (other == NULL || entries[i].distance == FLT_MAX)
             continue;
@@ -210,12 +224,9 @@ void drawConnection(Point* point, int index)
             continue;
 
         Vector2 other = e.point->pos;
-        unsigned char alpha = (unsigned char)(Clamp(1.0f - (e.distance / (float)CONNECTION_DIST), 0.0f, 1.0f) * 255.0f);
+        unsigned char alpha = (unsigned char)(Clamp(1.0f - (e.distance / (float)settings.connection_dist), 0.0f, 1.0f) * 255.0f);
         Color color = (Color) { 100, 255, 100, alpha };
-        Vector2 offset = Vector2Scale(Vector2Normalize(Vector2Subtract(other, point->pos)), RADIUS);
-        Vector2 startPos = Vector2Add(point->pos, offset);
-        Vector2 endPos = Vector2Subtract(other, offset);
-        DrawLineV(startPos, endPos, color);
+        DrawLineV(point->pos, other, color);
     }
 }
 
@@ -278,7 +289,7 @@ void drawPath(Point* end)
     unsigned int pathLength = 1;
     Point* current = end;
 
-    DrawCircleV(end->pos, RADIUS + 1, (Color) { 255, 0, 0, 255 });
+    DrawCircleV(end->pos, settings.radius + 1, (Color) { 255, 0, 0, 255 });
 
     while (current->best.point != NULL) {
         current = current->best.point;
@@ -292,12 +303,12 @@ void drawPath(Point* end)
     while (current->best.point != NULL) {
         DrawLineEx(current->pos, current->best.point->pos, 3,
             (Color) { 255, currentGreen, 0, 255 });
-        DrawCircleV(current->pos, RADIUS + 1, (Color) { 255, currentGreen, 0, 255 });
+        DrawCircleV(current->pos, settings.radius + 1, (Color) { 255, currentGreen, 0, 255 });
         current = current->best.point;
         currentGreen += colorStep;
     }
 
-    DrawCircleV(start->pos, RADIUS + 1, (Color) { 255, 255, 0, 255 });
+    DrawCircleV(start->pos, settings.radius + 1, (Color) { 255, 255, 0, 255 });
 }
 
 void getPath()
@@ -352,26 +363,66 @@ void drawConnections()
         drawConnection(&points[i], i);
 }
 
-int main(void)
+void drawLabeledSlider(Rectangle bounds, const char* label, const char* leftLabel, const char* rightLabel, float min, float max, float* var)
 {
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE + FLAG_WINDOW_HIGHDPI);
-    srand(time(NULL));
-    SetTraceLogLevel(LOG_WARNING);
-    InitWindow(X, Y, "Meh - Raylib");
-    SetTargetFPS(FPS);
-    SetRandomSeed(time(NULL));
-    initPoints();
+    int fontSize = GuiGetStyle(DEFAULT, TEXT_SIZE);
+    float gap = 10.0f;
+    float labelWidth = (float)MeasureText(label, fontSize);
+    float leftValueWidth = (float)MeasureText(leftLabel, fontSize) + GuiGetStyle(SLIDER, TEXT_PADDING);
+    Rectangle labelBounds = (Rectangle) {
+        bounds.x - leftValueWidth - gap - labelWidth,
+        bounds.y,
+        labelWidth,
+        bounds.height,
+    };
+    GuiLabel(labelBounds, label);
+    GuiSliderBar(bounds, leftLabel, rightLabel, var, min, max);
+}
 
-    X = GetScreenWidth();
-    Y = GetScreenHeight();
+void drawLabeledSliderInt(Rectangle bounds, const char* label, const char* leftLabel, const char* rightLabel, int min, int max, uint8_t* var)
+{
+    float temp = (float)*var;
+    drawLabeledSlider(bounds, label, leftLabel, rightLabel, (float)min, (float)max, &temp);
+    *var = (uint8_t)(temp + 0.5f);
+}
 
+void drawMenu()
+{
+    int b_width = 500;
+    int b_left = (X / 2.0f) - (b_width / 2.0f);
+    int width = 200;
+    int left = (X / 2.0f) - (width / 2.0f);
+    Rectangle background = (Rectangle) {
+        b_left,
+        Y / 2.0f,
+        b_width,
+        200
+    };
+    int result = GuiWindowBox(background, "Settings");
+    Rectangle current = (Rectangle) {
+        left,
+        Y / 2.0f + 40,
+        width,
+        20
+    };
+    drawLabeledSlider(current, "Speed", "50", "500", 50, 500, &settings.speed);
+    current.y += 40;
+    drawLabeledSlider(current, "C Dist.", "10", "500", 10, 500, &settings.connection_dist);
+    current.y += 40;
+    drawLabeledSliderInt(current, "Connections", "1", "10", 1, 10, &settings.connections);
+    current.y += 40;
+    drawLabeledSlider(current, "Radius", "1", "10", 1, 10, &settings.radius);
+    if (result)
+        menuShown = false;
+}
+
+void tick()
+{
     Vector2 mousePos;
+    if (IsKeyPressed(KEY_F))
+        ToggleFullscreen();
 
-    char time_buffer[33];
-    while (!WindowShouldClose()) {
-        if (IsKeyPressed(KEY_F))
-            ToggleFullscreen();
-
+    if (!menuShown) {
         if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
             mousePos = GetMousePosition();
             if (posInBounds(&mousePos))
@@ -385,25 +436,56 @@ int main(void)
                 end->vel = getRandomVel();
             }
         }
-
-        if (IsKeyPressed(KEY_C))
-            initPoints();
-
-        if (IsWindowResized()) {
-            X = GetScreenWidth();
-            Y = GetScreenHeight();
-        }
-        BeginDrawing();
-        ClearBackground(GRAY);
-        movePoints();
-        preparePoints();
-        getPath();
-        drawConnections();
-        drawPoints();
-        drawPath(end);
-        DrawFPS(10, 10);
-        EndDrawing();
     }
+
+    if (IsKeyPressed(KEY_S))
+        menuShown = true;
+
+    if (IsKeyPressed(KEY_C))
+        initPoints();
+
+    if (IsWindowResized()) {
+        X = GetScreenWidth();
+        Y = GetScreenHeight();
+    }
+    BeginDrawing();
+    ClearBackground(GRAY);
+    movePoints();
+    preparePoints();
+    getPath();
+    drawConnections();
+    drawPoints();
+    drawPath(end);
+    if (menuShown) {
+        drawMenu();
+    }
+    DrawFPS(10, 10);
+    EndDrawing();
+}
+
+int main(void)
+{
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE + FLAG_WINDOW_HIGHDPI);
+    srand(time(NULL));
+    SetTraceLogLevel(LOG_WARNING);
+    InitWindow(X, Y, "Astern - Raylib");
+    SetRandomSeed(time(NULL));
+    initPoints();
+    GuiLoadStyleDefault();
+    GuiSetStyle(DEFAULT, TEXT_SIZE, 20);
+
+    X = GetScreenWidth();
+    Y = GetScreenHeight();
+
+#if defined(PLATFORM_WEB)
+    // Let the browser handle updates
+    emscripten_set_main_loop(tick, 0, 1);
+#else
+    SetTargetFPS(FPS);
+    while (!WindowShouldClose()) {
+        tick();
+    }
+#endif
     CloseWindow();
     return EXIT_SUCCESS;
 }

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.11) # FetchContent is available in 3.11+
+cmake_minimum_required(VERSION 3.30) # FetchContent is available in 3.11+
 project(astern)
 
 # Generate compile_commands.json
@@ -6,9 +6,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Dependencies
 set(RAYLIB_VERSION 6.0)
-find_package(raylib ${RAYLIB_VERSION} REQUIRED) # QUIET or REQUIRED
+set(RAYGUI_VERSION 5.0)
+
+include(FetchContent)
+
+find_package(raylib ${RAYLIB_VERSION} QUIET) # QUIET or REQUIRED
 if (NOT raylib_FOUND) # If there's none, fetch and build raylib
-  include(FetchContent)
   FetchContent_Declare(
     raylib
     DOWNLOAD_EXTRACT_TIMESTAMP OFF
@@ -21,11 +24,23 @@ if (NOT raylib_FOUND) # If there's none, fetch and build raylib
   endif()
 endif()
 
+FetchContent_Declare(
+  raygui
+  DOWNLOAD_EXTRACT_TIMESTAMP OFF
+  URL https://github.com/raysan5/raygui/archive/refs/tags/${RAYGUI_VERSION}.tar.gz
+)
+FetchContent_MakeAvailable(raygui)
+
+# raygui is header-only; main.c provides RAYGUI_IMPLEMENTATION.
+add_library(raygui INTERFACE)
+target_include_directories(raygui INTERFACE ${raygui_SOURCE_DIR}/src)
+target_link_libraries(raygui INTERFACE raylib)
+
 # Our Project
 
 add_executable(${PROJECT_NAME} main.c)
-#set(raylib_VERBOSE 1)
-target_link_libraries(${PROJECT_NAME} raylib)
+target_link_libraries(${PROJECT_NAME} raygui)
+
 
 # Web Configurations
 set(PLATFORM "PLATFORM_DESKTOP" CACHE STRING "Target platform (set to Web for an Emscripten build)")
