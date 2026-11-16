@@ -18,12 +18,13 @@ typedef struct {
     float radius;
     float connection_dist;
     uint8_t connections;
+    uint16_t points;
 } Settings;
 
-Settings settings = (Settings) { 100, 5, 100, 3 };
+Settings settings = (Settings) { 100, 5, 100, 3, 500 };
 
 #define FPS 60
-#define POINTS 500
+#define MAX_POINTS 1000
 #define MAX_CONNECTIONS 30
 #define MIN_SPEED 1
 #define MAX_SPEED 5
@@ -44,7 +45,7 @@ typedef struct Point {
     Entry connected[MAX_CONNECTIONS];
 } Point;
 
-Point points[POINTS];
+Point points[MAX_POINTS];
 unsigned int X = 1920;
 unsigned int Y = 1080;
 Point* start;
@@ -74,7 +75,7 @@ void initPoint(Point* point)
 
 void initPoints()
 {
-    for (unsigned int i = 2; i < POINTS; i++)
+    for (unsigned int i = 2; i < settings.points; i++)
         initPoint(&points[i]);
     points[0] = (Point) { (Vector2) { 20, 20 }, (Vector2) { 0, 0 } };
     points[1] = (Point) { (Vector2) { X - 20, Y - 20 }, (Vector2) { 0, 0 } };
@@ -96,7 +97,7 @@ void movePoint(Point* point)
 
 void movePoints()
 {
-    for (unsigned int i = 0; i < POINTS; i++)
+    for (unsigned int i = 0; i < settings.points; i++)
         movePoint(&points[i]);
 }
 
@@ -107,7 +108,7 @@ void drawPoint(Point point)
 
 void drawPoints()
 {
-    for (unsigned int i = 0; i < POINTS; i++)
+    for (unsigned int i = 0; i < settings.points; i++)
         drawPoint(points[i]);
 }
 
@@ -175,7 +176,7 @@ void getNearestPoints(Point* point, int index)
     uint8_t max_index = getMaxDistanceIndex(point);
     float max_distance = entries[max_index].distance;
 
-    for (uint16_t i = 0; i < POINTS; i++) {
+    for (uint16_t i = 0; i < settings.points; i++) {
         if (i == index)
             continue;
         other = &points[i];
@@ -232,7 +233,7 @@ void drawConnection(Point* point, int index)
 
 void addPointIfNotExists(Point* point, Point** points)
 {
-    for (unsigned int i = 0; i < POINTS; i++) {
+    for (unsigned int i = 0; i < settings.points; i++) {
         if (points[i] == point)
             return;
         if (points[i] == NULL) {
@@ -244,7 +245,7 @@ void addPointIfNotExists(Point* point, Point** points)
 
 Point* getRandomPoint()
 {
-    return &points[abs(rand()) % POINTS];
+    return &points[abs(rand()) % settings.points];
 }
 
 void visit(Point* point, Point** next)
@@ -314,8 +315,8 @@ void drawPath(Point* end)
 void getPath()
 {
     start->value = 0;
-    Point* next[POINTS] = { 0 };
-    Point* current[POINTS] = { 0 };
+    Point* next[MAX_POINTS] = { 0 };
+    Point* current[MAX_POINTS] = { 0 };
     next[0] = start;
 
     unsigned int count_next = 1;
@@ -325,16 +326,16 @@ void getPath()
         count_next = 0;
         for (unsigned int i = 0; i < count; i++)
             current[i] = next[i];
-        for (unsigned int i = count; i < POINTS; i++)
+        for (unsigned int i = count; i < settings.points; i++)
             current[i] = NULL;
 
-        for (unsigned int i = 0; i < POINTS; i++)
+        for (unsigned int i = 0; i < settings.points; i++)
             next[i] = NULL;
 
         for (unsigned int i = 0; i < count; i++)
             visit(current[i], next);
 
-        for (unsigned int i = 0; i < POINTS; i++) {
+        for (unsigned int i = 0; i < settings.points; i++) {
             if (next[i] == NULL)
                 break;
             count_next++;
@@ -347,19 +348,19 @@ void getPath()
 
 void preparePoints()
 {
-    for (unsigned int i = 0; i < POINTS; i++)
+    for (unsigned int i = 0; i < settings.points; i++)
         preparePoint(&points[i]);
 
-    for (unsigned int i = 0; i < POINTS; i++)
+    for (unsigned int i = 0; i < settings.points; i++)
         getNearestPoints(&points[i], i);
 
-    for (unsigned int i = 0; i < POINTS; i++)
+    for (unsigned int i = 0; i < settings.points; i++)
         completeConnections(&points[i]);
 }
 
 void drawConnections()
 {
-    for (unsigned int i = 0; i < POINTS; i++)
+    for (unsigned int i = 0; i < settings.points; i++)
         drawConnection(&points[i], i);
 }
 
@@ -379,39 +380,51 @@ void drawLabeledSlider(Rectangle bounds, const char* label, const char* leftLabe
     GuiSliderBar(bounds, leftLabel, rightLabel, var, min, max);
 }
 
-void drawLabeledSliderInt(Rectangle bounds, const char* label, const char* leftLabel, const char* rightLabel, int min, int max, uint8_t* var)
+int drawLabeledSliderInt(Rectangle bounds, const char* label, const char* leftLabel, const char* rightLabel, int min, int max, int value)
 {
-    float temp = (float)*var;
+    float temp = (float)value;
     drawLabeledSlider(bounds, label, leftLabel, rightLabel, (float)min, (float)max, &temp);
-    *var = (uint8_t)(temp + 0.5f);
+    return (int)(temp + 0.5f);
 }
 
 void drawMenu()
 {
     int b_width = 500;
     int b_left = (X / 2.0f) - (b_width / 2.0f);
+    int b_height = 300;
+    int b_top = (Y / 2.0f) - (b_height / 2.0f);
+
     int width = 200;
     int left = (X / 2.0f) - (width / 2.0f);
+    int height = 20;
+    int top = (Y / 2.0f) - (b_top / 2.0f) + 40;
+
     Rectangle background = (Rectangle) {
         b_left,
-        Y / 2.0f,
+        b_top,
         b_width,
-        200
+        b_height
     };
     int result = GuiWindowBox(background, "Settings");
     Rectangle current = (Rectangle) {
         left,
-        Y / 2.0f + 40,
+        top,
         width,
-        20
+        height
     };
     drawLabeledSlider(current, "Speed", "50", "500", 50, 500, &settings.speed);
     current.y += 40;
     drawLabeledSlider(current, "C Dist.", "10", "500", 10, 500, &settings.connection_dist);
     current.y += 40;
-    drawLabeledSliderInt(current, "Connections", "1", "10", 1, 10, &settings.connections);
+    settings.connections = (uint8_t)drawLabeledSliderInt(current, "Connections", "1", "10", 1, 10, settings.connections);
     current.y += 40;
     drawLabeledSlider(current, "Radius", "1", "10", 1, 10, &settings.radius);
+    current.y += 40;
+    uint16_t points_before = settings.points;
+    settings.points = (uint16_t)drawLabeledSliderInt(current, "Points", "10", "1000", 10, MAX_POINTS, settings.points);
+    if (settings.points > points_before)
+        for (uint16_t i = points_before; i < settings.points; i++)
+            initPoint(&points[i]);
     if (result)
         menuShown = false;
 }
